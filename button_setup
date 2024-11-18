@@ -1,0 +1,62 @@
+# SPDX-FileCopyrightText: 2019 Kattni Rembor for Adafruit Industries
+#
+# SPDX-License-Identifier: MIT
+
+import board
+import digitalio
+from adafruit_ble import BLERadio
+from adafruit_ble.advertising.standard import ProvideServicesAdvertisement
+from adafruit_ble.services.nordic import UARTService
+from adafruit_bluefruit_connect.button_packet import ButtonPacket
+import time
+
+# Setup the button on pin 10
+button = digitalio.DigitalInOut(board.D10)
+button.direction = digitalio.Direction.INPUT
+button.pull = digitalio.Pull.UP  # Use pull-up resistor
+
+# Setup the built-in LED
+led = digitalio.DigitalInOut(board.LED)
+led.direction = digitalio.Direction.OUTPUT
+
+# Setup BLE
+ble = BLERadio()
+uart = UARTService()
+advertisement = ProvideServicesAdvertisement(uart)
+
+# Keep track of the button's previous state
+button_state = button.value
+
+while True:
+    # Turn on LED briefly to show the board has power and code is running
+    led.value = True
+    time.sleep(0.5)
+    led.value = False
+    
+    ble.start_advertising(advertisement)
+    while not ble.connected:
+        pass
+
+    print("Connected to Bluefruit device!")
+
+    while ble.connected:
+        # Check if button state has changed
+        current_button_state = button.value
+        
+        if current_button_state != button_state:
+            button_state = current_button_state
+            
+            if not button_state:  # Button is pressed (False when pressed with pull-up)
+                led.value = True  # Turn LED on
+                # Create and send button packet (using BUTTON_1 as an example)
+                button_packet = ButtonPacket(ButtonPacket.BUTTON_1, pressed=True)
+                uart.write(button_packet.to_bytes())
+                print("Button release sent to app!")
+            else:  # Button is released
+                led.value = False  # Turn LED off
+                # Send button release packet
+                button_packet = ButtonPacket(ButtonPacket.BUTTON_1, pressed=False)
+                uart.write(button_packet.to_bytes())
+                print("Button press sent to app!")
+
+    print("Disconnected from Bluefruit device!")
